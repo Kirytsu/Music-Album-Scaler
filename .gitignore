@@ -1,0 +1,81 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+*.egg-info/
+*.egg
+pip-wheel-metadata/
+wheelhouse/
+
+# PyInstaller
+#  Usually these files are written by a python script from a template
+#  before PyInstaller builds the exe, so as to inject date/other infos into it.
+*.manifest
+*.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+.pytest_cache/
+nosetests.xml
+coverage.xml
+*.cover
+hypothesis/
+.hypothesis/
+
+# Pyre type check
+.pyre/
+
+# mypy
+.mypy_cache/
+
+# Virtualenvs
+venv/
+env/
+.venv/
+ENV/
+env.bak/
+
+# VS Code
+.vscode/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# OneDrive temp / Office files
+~$*
+
+# Python bytecode artifacts from editors/IDE
+*.pyc
+
+# local env files
+.env
+.env.*
+
+# backups and local artifacts
+*_backup.*
+folder.jpg
