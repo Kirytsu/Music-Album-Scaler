@@ -1,69 +1,32 @@
-# Project Usage
+# Audio File Utility
 
-## Background
-This project is originally created because the limitation of my DAP (Digital Audio Player / F.Audio FA4) to display album art of some music files. This project aim to normalize music files by embedding the album art so it could be displayed in those DAP. Furthermore, I tried to have a renaming function base on the track number and track name.
+A tool to normalize album art (600 x 600 pixels) and rename audio files based on metadata.
 
-## Purpose
-Normalize embedded album art inside music files and optionally rename files base on their metadata. 
+## Setup
 
-## Requirements
 ```powershell
 pip install -r requirements.txt
 ```
 
-## Arguments
-- `--dir`, `-d` PATH
-	- Target directory to scan (default: current directory).
+## Usage
 
-- `--dry-run`
-	- Do not write changes; print what the tool would do.
-
-- `--backup`
-	- Create a `_backup` copy of each original audio file before modifying it.
-
-- `--rename`
-	- When enabled (and not using `--rename-only`), allow renaming files after embedding.
-
-- `--embed-only`
-	- Only embed cover art; do not rename files.
-
-- `--rename-only`
-	- Only rename files; do not embed cover art.
-
-- `--workers`, `-w` N
-	- Number of worker threads for parallel processing (default: 4).
-
-- `--verbose`, `-v`
-	- Show detailed output while processing.
-
-## Examples (PowerShell)
-- Embed only (do not rename):
+Run the interactive menu:
 
 ```powershell
-python3 .\main.py --dir "C:\path\to\music" --embed-only 
+python main.py
 ```
 
-- Rename only (do not embed):
+The menu offers 4 options:
+1. **Embed cover art only** - Normalize album art (resize, convert to JPEG)
+2. **Rename files only** - Rename based on track number and title
+3. **Embed + Rename** - Do both operations
+4. **Rename folders** - Rename folders by album metadata
 
-```powershell
-python3 .\main.py --dir "C:\path\to\music" --rename-only 
-```
+## Supported Formats
 
-- Embed + rename, without backups:
+MP3, M4A/MP4, FLAC, OGG/Opus
 
-```powershell
-python3 .\main.py --dir "C:\path\to\music" --rename
-```
+## Notes
 
-- Embed + rename, with backups:
-
-```powershell
-python3 .\main.py --dir "C:\path\to\music" --rename --backup
-```
-
-Notes
------
-- Supported formats: MP3, M4A/MP4, FLAC, OGG/Opus. Other formats may still work via a best-effort fallback.
-- Recommended `--workers`:
-	On a 4-core / 8-thread CPU start with `--workers 4`; increase to `8` if you want to test hyperthreading speedups.
-- Please test the usage within one folder/album to check if it's working before fully embedding whole your collection. 
+- Test on one album first before processing your entire collection
+- Backup option available in the menu 

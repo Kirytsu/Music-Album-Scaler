@@ -283,6 +283,60 @@ def get_title(path: str) -> Optional[str]:
         return None
 
 
+def get_album(path: str) -> Optional[str]:
+    """Extract album name from audio file metadata."""
+    _, ext = os.path.splitext(path)
+    ext = ext.lower()
+    try:
+        if ext == ".mp3":
+            try:
+                tags = ID3(path)
+            except ID3NoHeaderError:
+                return None
+            alb = tags.getall("TALB")
+            if alb:
+                return str(alb[0].text[0])
+            return None
+
+        elif ext in (".m4a", ".mp4"):
+            mp4 = MP4(path)
+            alb = mp4.tags.get("\xa9alb")
+            if alb:
+                return str(alb[0])
+            return None
+
+        elif ext == ".flac":
+            fl = FLAC(path)
+            a = fl.tags.get("album") or fl.tags.get("ALBUM")
+            if a:
+                return str(a[0])
+            return None
+
+        elif ext in (".ogg", ".opus"):
+            ogg = OggVorbis(path)
+            a = ogg.get("album") or ogg.get("ALBUM")
+            if a:
+                return str(a[0])
+            return None
+
+        else:
+            f = File(path)
+            if f is None or not getattr(f, "tags", None):
+                return None
+            for key in ("album", "ALBUM", "TALB", "\xa9alb"):
+                try:
+                    val = f.tags.get(key)
+                except Exception:
+                    val = None
+                if val:
+                    if isinstance(val, (list, tuple)):
+                        val = val[0]
+                    return str(val)
+            return None
+    except Exception:
+        return None
+
+
 def sanitize_filename(s: str, maxlen: int = 200) -> str:
     s = str(s)
     s = s.strip()
@@ -294,7 +348,7 @@ def sanitize_filename(s: str, maxlen: int = 200) -> str:
     return s
 
 
-def safe_rename(old_path: str, new_name: str, dry_run: bool = False):
+def safe_rename(old_path: str, new_name: str):
     dirp = os.path.dirname(old_path)
     target = os.path.join(dirp, new_name)
     base, ext = os.path.splitext(new_name)
@@ -302,10 +356,6 @@ def safe_rename(old_path: str, new_name: str, dry_run: bool = False):
     while os.path.exists(target) and os.path.abspath(target) != os.path.abspath(old_path):
         target = os.path.join(dirp, f"{base}_{count}{ext}")
         count += 1
-
-    if dry_run:
-        print(f"Dry-run: would rename: {old_path} -> {target}")
-        return target
 
     try:
         shutil.move(old_path, target)
@@ -315,14 +365,10 @@ def safe_rename(old_path: str, new_name: str, dry_run: bool = False):
         return old_path
 
 
-def embed_cover(path: str, jpeg_bytes: bytes, dry_run: bool = False, backup: bool = True):
+def embed_cover(path: str, jpeg_bytes: bytes, backup: bool = False):
     _, ext = os.path.splitext(path)
     ext = ext.lower()
     print(f"Embedding JPEG cover into: {path}")
-
-    if dry_run:
-        print("Dry-run: not writing file")
-        return
 
     try:
         if backup:
@@ -440,23 +486,88 @@ def embed_cover(path: str, jpeg_bytes: bytes, dry_run: bool = False, backup: boo
         print(f"Error embedding cover into {path}: {e}")
 
 
+def get_majority_album(folder_path: str) -> Optional[str]:
+    """Analyze all audio files in a folder and return the most common album name."""
+    from collections import Counter
+    
+    albums = []
+    for file_path in find_audio_files(folder_path, DEFAULT_EXTENSIONS):
+        # Only check files directly in this folder (not subdirectories)
+        if os.path.dirname(file_path) == os.path.abspath(folder_path):
+            album = get_album(file_path)
+            if album and album.strip():
+                albums.append(album.strip())
+    
+    if not albums:
+        return None
+    
+    # Get the most common album name
+    counter = Counter(albums)
+    most_common = counter.most_common(1)[0]
+    return most_common[0]
+
+
+def rename_folder_by_album(folder_path: str) -> tuple:
+    """Rename folder based on majority album name from tracks.
+    Returns (status, old_path, new_path_or_message).
+    """
+    try:
+        album = get_majority_album(folder_path)
+        if not album:
+            return ("skipped", folder_path, "no album metadata found")
+        
+        # Get parent directory and current folder name
+        parent = os.path.dirname(folder_path)
+        current_name = os.path.basename(folder_path)
+        
+        # Sanitize album name for folder
+        safe_album = sanitize_filename(album)
+        
+        # Skip if folder is already named correctly
+        if current_name == safe_album:
+            return ("skipped", folder_path, "already named correctly")
+        
+        # Create new path
+        new_path = os.path.join(parent, safe_album)
+        
+        # Handle conflicts
+        if os.path.exists(new_path):
+            count = 1
+            while os.path.exists(new_path):
+                new_path = os.path.join(parent, f"{safe_album}_{count}")
+                count += 1
+        
+        # Rename folder
+        try:
+            os.rename(folder_path, new_path)
+            return ("processed", folder_path, new_path)
+        except Exception as e:
+            return ("error", folder_path, f"failed to rename: {e}")
+    
+    except Exception as e:
+        return ("error", folder_path, str(e))
+
+
 def process_path(path: str, args) -> tuple:
     """Worker to process a single file. Returns (status, path, message).
     status: 'processed', 'skipped', 'error'
     """
     try:
-        info = extract_cover_bytes(path)
-        if not info:
-            return ("skipped", path, "no embedded cover")
-
-        img_bytes, mime = info
-
-        jpeg = None
-        if getattr(args, "do_embed", True):
-            jpeg = process_image_to_jpeg(img_bytes)
-            embed_cover(path, jpeg, dry_run=args.dry_run, backup=args.backup)
-
+        did_something = False
         new_path = path
+        
+        # Handle embedding if requested
+        if getattr(args, "do_embed", True):
+            info = extract_cover_bytes(path)
+            if info:
+                img_bytes, mime = info
+                jpeg = process_image_to_jpeg(img_bytes)
+                embed_cover(path, jpeg, backup=getattr(args, "backup", False))
+                did_something = True
+            # If no cover but embed was requested, just skip the embed part
+            # (don't fail the whole operation if rename is also requested)
+        
+        # Handle renaming if requested
         if getattr(args, "do_rename", False):
             track = get_track_number(path)
             if track is not None:
@@ -465,9 +576,23 @@ def process_path(path: str, args) -> tuple:
                 base_new = f"{int(track):02d}. {title}"
                 ext = os.path.splitext(path)[1]
                 new_name = base_new + ext
-                new_path = safe_rename(path, new_name, dry_run=args.dry_run)
+                new_path = safe_rename(path, new_name)
                 print(f"Renamed to: {new_path}")
-
+                did_something = True
+            else:
+                # Only fail if ONLY rename was requested and no track number
+                if not getattr(args, "do_embed", True):
+                    return ("skipped", path, "no track number metadata")
+        
+        # If we were supposed to do something but couldn't
+        if not did_something:
+            if getattr(args, "do_embed", True) and not getattr(args, "do_rename", False):
+                return ("skipped", path, "no embedded cover")
+            elif getattr(args, "do_rename", False) and not getattr(args, "do_embed", True):
+                return ("skipped", path, "no track number metadata")
+            else:
+                return ("skipped", path, "no cover and no track number")
+        
         return ("processed", new_path, "ok")
     except Exception as e:
         return ("error", path, str(e))
